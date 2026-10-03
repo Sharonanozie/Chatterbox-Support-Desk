@@ -157,7 +157,8 @@ async function ai(p, images = []) {
         x?.message ||
         'Could not connect to the Chatterbox AI backend.'
     };
-  }
+  }  
+}
 
 const aerr=x=>x&&x.code=='none'?'No AI connected. Add OPENAI_API_KEY or ANTHROPIC_API_KEY in Vercel Environment Variables.':x&&x.code=='nokey'?'No AI key is configured on Vercel yet.':x&&x.code=='key'?'The AI API key was rejected. Check the Vercel Environment Variables.':x&&x.code=='payload'?'The evidence is too large. Remove an image or use fewer/smaller screenshots.':x&&x.code=='url'?'A supplied link could not be read. Check that it is a public http/https page.':x&&x.code=='http'?'The AI service returned an error. Check the provider/model in Setup.':x&&x.code=='rate_limited'?'Too many requests. Wait a moment.':x&&x.message||'Could not reach the AI. Check your connection and Setup.';
 function prompt_(){

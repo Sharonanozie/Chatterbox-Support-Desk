@@ -87,15 +87,78 @@ const q=v=>`"${String(v==null?'':v).replace(/"/g,'""')}"`,csv=rows=>'\ufeff'+row
 function post(t){return `TICKET #${t.id}\nClient: ${t.client}\nProduct: ${t.product}\nType: ${t.type}\nSeverity: ${t.severity}\nWhat happened: ${t.summary}\nSteps to reproduce: ${t.steps||'n/a'}\nScreenshots / evidence: ${t.images&&t.images.length?t.images.join(', '):'[attach if needed]'}${t.links&&t.links.length?'\nLinks: '+t.links.join(', '):''}\nVoice note: ${t.voice?'voice note on file ('+t.voice+')':'none'}\nReported: ${new Date(t.ts).toLocaleString()}}`}
 function rulesText(){const s=(D.notes.trim()?`--- AGENT NOTES (highest priority) ---\n${D.notes.trim()}\n`:'')+D.docs.filter(d=>d.on).map(d=>`--- DOCUMENT: ${d.name} ---\n${d.text}`).join('\n');return('If documents conflict, the most recently added one wins.\n'+s).slice(0,150000)}
 function pj(t){t=String(t).replace(/```json|```/g,'');const a=t.indexOf('{'),b=t.lastIndexOf('}');return JSON.parse(t.slice(a,b+1))}
-async function ai(p,images=[]){
-  if(window.claude&&CF.p=='auto'&&!location.hostname.includes('vercel.app')){
-    const sm=await claude.use('sample');if(!sm)throw{code:'none'};
-    return await sm.json(p,{cache:false});
+async function ai(p, images = []) {
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'user',
+            content: p
+          }
+        ]
+      })
+    });
+
+    let j = {};
+
+    try {
+      j = await r.json();
+    } catch (e) {
+      throw {
+        code: 'backend',
+        message: 'The server returned an invalid response.'
+      };
+    }
+
+    if (!r.ok) {
+      if (r.status === 401 || r.status === 403) {
+        throw { code: 'key' };
+      }
+
+      if (r.status === 429) {
+        throw { code: 'rate_limited' };
+      }
+
+      throw {
+        code: 'backend',
+        message: j.error || 'The AI backend returned an error.'
+      };
+    }
+
+    if (!j.text) {
+      throw {
+        code: 'backend',
+        message: 'The AI returned an empty response.'
+      };
+    }
+
+    return pj(j.text);
+
+  } catch (x) {
+    if (
+      x &&
+      (
+        x.code === 'key' ||
+        x.code === 'rate_limited' ||
+        x.code === 'backend'
+      )
+    ) {
+      throw x;
+    }
+
+    throw {
+      code: 'backend',
+      message:
+        x?.message ||
+        'Could not connect to the Chatterbox AI backend.'
+    };
   }
-  const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({provider:CF.p,model:CF.m,prompt:p,images})});
-  if(!r.ok){let j={};try{j=await r.json()}catch(e){}throw{code:j.code||'http',message:j.error||''}}
-  const j=await r.json();return j.result;
-}
+
 const aerr=x=>x&&x.code=='none'?'No AI connected. Add OPENAI_API_KEY or ANTHROPIC_API_KEY in Vercel Environment Variables.':x&&x.code=='nokey'?'No AI key is configured on Vercel yet.':x&&x.code=='key'?'The AI API key was rejected. Check the Vercel Environment Variables.':x&&x.code=='payload'?'The evidence is too large. Remove an image or use fewer/smaller screenshots.':x&&x.code=='url'?'A supplied link could not be read. Check that it is a public http/https page.':x&&x.code=='http'?'The AI service returned an error. Check the provider/model in Setup.':x&&x.code=='rate_limited'?'Too many requests. Wait a moment.':x&&x.message||'Could not reach the AI. Check your connection and Setup.';
 function prompt_(){
   const msg=CM.trim()+(VT.trim()?`\n[Voice note transcript]: ${VT.trim()}`:'');
